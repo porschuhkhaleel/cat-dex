@@ -1,0 +1,14 @@
+# Frontend
+node_modules/
+dist/
+
+# Backend
+__pycache__/
+venv/
+.venv/
+
+# Local AI Models (if your new library downloaded any heavy weights)
+*.pt
+*.bin
+*.h5
+*.onnx

@@ -1,0 +1,30 @@
+{
+  "Tabby": {
+    "funFacts": [
+      "\"Tabby\" describes a coat pattern, not a breed -- the swirls, stripes, or spots can show up in almost any cat.",
+      "Most tabbies have a faint 'M' marking on their forehead, which some folklore ties to Mau, the Egyptian word for cat.",
+      "Tabby patterns come in four main types: classic (swirled), mackerel (striped), spotted, and ticked."
+    ]
+  },
+  "Siamese": {
+    "funFacts": [
+      "Siamese cats are famously vocal and will hold entire 'conversations' with their owners.",
+      "Their signature color points are heat-sensitive -- cooler areas like the ears, face, and tail run darker.",
+      "The breed traces back centuries to Siam (modern-day Thailand), where it was once kept by royalty."
+    ]
+  },
+  "Maine Coon": {
+    "funFacts": [
+      "Maine Coons are one of the largest domestic cat breeds, with males often topping 18 pounds.",
+      "Their tufted paws act like natural snowshoes, a trait suited to their cold New England origins.",
+      "Despite their size, they're known as 'gentle giants' with famously easygoing temperaments."
+    ]
+  },
+  "British Shorthair": {
+    "funFacts": [
+      "The breed's round face and dense, plush coat make it one of the most recognizable in the world.",
+      "It's believed to descend from cats brought to Britain by Roman traders nearly 2,000 years ago.",
+      "The Cheshire Cat in Alice in Wonderland is widely thought to have been inspired by this breed."
+    ]
+  }
+}
