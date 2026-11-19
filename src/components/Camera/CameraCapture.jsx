@@ -173,7 +173,6 @@ export default function CameraCapture({ onSaved }) {
       );
       if (!photoBlob) throw new Error("Failed to capture photo.");
 
-      // Run background removal and breed identification at the same time
       const [cutoutBlob, identified] = await Promise.all([
         removeBackground(photoBlob),
         identifyCat(canvas),
@@ -295,4 +294,52 @@ export default function CameraCapture({ onSaved }) {
 
           <input
             type="text"
-            placeholder="Name
+            placeholder="Name this cat..."
+            value={catName}
+            onChange={(e) => setCatName(e.target.value)}
+            disabled={saving}
+            className="w-full max-w-xs px-4 py-3 rounded-xl bg-white text-black text-lg text-center font-semibold mb-4 outline-none"
+            autoFocus
+          />
+
+          <div className="flex gap-3 w-full max-w-xs">
+            <button
+              onClick={() => {
+                setStickerBase64(null);
+                setCatInfo(null);
+                setCatName("");
+                resumeVideo();
+              }}
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-neutral-700 text-white font-bold"
+            >
+              Discard
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-white text-black font-bold disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save to Dex"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="absolute top-6 inset-x-4 flex justify-center z-50">
+          <div className="flex items-center gap-3 bg-white text-black rounded-full pl-5 pr-2 py-2 shadow-lg">
+            <span className="text-sm font-medium">{toast}</span>
+            <button
+              onClick={() => setToast("")}
+              className="w-7 h-7 rounded-full bg-neutral-200 text-sm font-bold"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
