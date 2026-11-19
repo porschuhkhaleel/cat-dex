@@ -14,16 +14,61 @@ const LOADING_TEXTS = [
 
 async function blobToResizedStickerDataUrl(blob) {
   const bitmap = await createImageBitmap(blob);
-  const scale = Math.min(1, MAX_STICKER_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+  // Draw full cutout to inspect pixels
+  const raw = document.createElement("canvas");
+  raw.width = bitmap.width;
+  raw.height = bitmap.height;
+  const rawCtx = raw.getContext("2d");
+  rawCtx.drawImage(bitmap, 0, 0);
   bitmap.close();
 
-  // WebP keeps transparent backgrounds small (~50-120 KB) for Firestore
-  const webp = canvas.toDataURL("image/webp", 0.85);
-  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
+  const imgData = rawCtx.getImageData(0, 0, raw.width, raw.height);
+  const data = imgData.data;
+
+  // 1. Remove faint semi-transparent wisps that cause white blobs
+  // 2. Find the tight bounding box around the cat to auto-crop
+  let minX = raw.width;
+  let minY = raw.height;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (let y = 0; y < raw.height; y++) {
+    for (let x = 0; x < raw.width; x++) {
+      const idx = (y * raw.width + x) * 4;
+      if (data[idx + 3] < 140) {
+        data[idx + 3] = 0;
+      } else {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  rawCtx.putImageData(imgData, 0, 0);
+
+  // Fallback if image was completely empty
+  if (maxX <= minX || maxY <= minY) {
+    minX = 0;
+    minY = 0;
+    maxX = raw.width - 1;
+    maxY = raw.height - 1;
+  }
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const scale = Math.min(1, MAX_STICKER_SIDE / Math.max(cropW, cropH));
+
+  const out = document.createElement("canvas");
+  out.width = Math.round(cropW * scale);
+  out.height = Math.round(cropH * scale);
+  out
+    .getContext("2d")
+    .drawImage(raw, minX, minY, cropW, cropH, 0, 0, out.width, out.height);
+
+  const webp = out.toDataURL("image/webp", 0.85);
+  return webp.startsWith("data:image/webp") ? webp : out.toDataURL("image/png");
 }
 
 export default function CameraCapture({ onSaved }) {
