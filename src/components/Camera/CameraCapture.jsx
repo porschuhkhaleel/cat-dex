@@ -1,33 +1,63 @@
 import { useEffect, useRef, useState } from "react";
-import IdentificationOverlay from "./IdentificationOverlay";
+import { removeBackground } from "@imgly/background-removal";
+import { useAuth } from "../../contexts/AuthContext";
+import { saveCatToCollection } from "../../utils/collectionStorage";
 
-const IDENTIFY_ROUTE = "/api/identify"; // change to match your backend
-const FIELD_NAME = "file"; // change to match your backend
-const MAX_SIDE = 1280;
+const MAX_CAPTURE_SIDE = 1024;
+const MAX_STICKER_SIDE = 512;
 const LOADING_TEXTS = [
   "Locking in...",
-  "Looking at your shot...",
   "Finding the cat...",
-  "Peeling it off...",
+  "Cutting out your sticker...",
+  "Almost done...",
 ];
 
-export default function CameraCapture() {
+async function blobToResizedStickerDataUrl(blob) {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, MAX_STICKER_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  // WebP keeps transparent backgrounds small (~50-120 KB) for Firestore
+  const webp = canvas.toDataURL("image/webp", 0.85);
+  return webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/png");
+}
+
+export default function CameraCapture({ onSaved }) {
+  const { currentUser } = useAuth();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [camError, setCamError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
-  const [result, setResult] = useState(null);
+  const [stickerBase64, setStickerBase64] = useState(null);
+  const [catName, setCatName] = useState("");
   const [toast, setToast] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    async function start() {
+
+    async function getCameraStream() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        return await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
           audio: false,
         });
+      } catch {
+        return await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+    }
+
+    async function start() {
+      try {
+        const stream = await getCameraStream();
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -35,23 +65,25 @@ export default function CameraCapture() {
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
+          await videoRef.current.play().catch(() => {});
         }
       } catch (err) {
         if (!cancelled) {
           setCamError(
             err && err.name === "NotAllowedError"
-              ? "Camera access was blocked. Please allow camera permission in your browser settings and reload."
-              : "We couldn't start your camera. Make sure one is available and you're on HTTPS or localhost."
+              ? "Camera access was blocked. Allow camera permission in your browser settings and reload."
+              : "Couldn't start your camera. Make sure one is available and you're on HTTPS or localhost."
           );
         }
       }
     }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCamError("Your browser doesn't support camera access.");
     } else {
       start();
     }
+
     return () => {
       cancelled = true;
       if (streamRef.current) {
@@ -66,7 +98,7 @@ export default function CameraCapture() {
     setTextIndex(0);
     const id = setInterval(
       () => setTextIndex((i) => (i + 1) % LOADING_TEXTS.length),
-      1400
+      1500
     );
     return () => clearInterval(id);
   }, [loading]);
@@ -75,48 +107,62 @@ export default function CameraCapture() {
     if (videoRef.current) videoRef.current.play().catch(() => {});
   }
 
-  function showError(msg) {
-    setToast(msg);
-    resumeVideo();
-  }
-
   async function handleShutter() {
     const video = videoRef.current;
     if (!video || loading || !video.videoWidth) return;
+
     setLoading(true);
     setToast("");
     video.pause();
+
     try {
-      const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight));
+      const scale = Math.min(
+        1,
+        MAX_CAPTURE_SIDE / Math.max(video.videoWidth, video.videoHeight)
+      );
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(video.videoWidth * scale);
       canvas.height = Math.round(video.videoHeight * scale);
       canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve) =>
+
+      const photoBlob = await new Promise((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.9)
       );
-      if (!blob) throw new Error("Could not capture image");
+      if (!photoBlob) throw new Error("Failed to capture photo.");
 
-      const form = new FormData();
-      form.append(FIELD_NAME, blob, "cat.jpg");
-      const res = await fetch(import.meta.env.VITE_API_BASE_URL + IDENTIFY_ROUTE, {
-        method: "POST",
-        body: form,
-      });
-      if (!res.ok) throw new Error("Bad status " + res.status);
-      const data = await res.json();
-      if (data.success === false) throw new Error("Backend reported failure");
-      setResult(data);
+      const cutoutBlob = await removeBackground(photoBlob);
+      const dataUrl = await blobToResizedStickerDataUrl(cutoutBlob);
+      setStickerBase64(dataUrl);
     } catch (err) {
-      showError("Couldn't identify that one. Check your connection and try again.");
+      console.error("Sticker error:", err);
+      setToast("Couldn't cut out that photo. Try again!");
+      resumeVideo();
     } finally {
       setLoading(false);
     }
   }
 
-  function closeOverlay() {
-    setResult(null);
-    resumeVideo();
+  async function handleSave() {
+    if (!catName.trim()) {
+      setToast("Give your cat a name first!");
+      return;
+    }
+    setSaving(true);
+    setToast("");
+    try {
+      await saveCatToCollection(currentUser.uid, {
+        name: catName,
+        stickerBase64,
+      });
+      setStickerBase64(null);
+      setCatName("");
+      if (onSaved) onSaved();
+    } catch (err) {
+      console.error("Save error:", err);
+      setToast("Couldn't save to your collection. Check your connection.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (camError) {
@@ -142,31 +188,77 @@ export default function CameraCapture() {
         className="absolute inset-0 w-full h-full object-cover"
       />
 
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="relative w-[72vmin] h-[72vmin] max-w-md max-h-md">
-          <span className={`${corner} top-0 left-0 border-t-3 border-l-3 rounded-tl-3xl`} />
-          <span className={`${corner} top-0 right-0 border-t-3 border-r-3 rounded-tr-3xl`} />
-          <span className={`${corner} bottom-0 left-0 border-b-3 border-l-3 rounded-bl-3xl`} />
-          <span className={`${corner} bottom-0 right-0 border-b-3 border-r-3 rounded-br-3xl`} />
-        </div>
-      </div>
+      {!stickerBase64 && (
+        <>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative w-[72vmin] h-[72vmin] max-w-md max-h-md">
+              <span className={`${corner} top-0 left-0 border-t-3 border-l-3 rounded-tl-3xl`} />
+              <span className={`${corner} top-0 right-0 border-t-3 border-r-3 rounded-tr-3xl`} />
+              <span className={`${corner} bottom-0 left-0 border-b-3 border-l-3 rounded-bl-3xl`} />
+              <span className={`${corner} bottom-0 right-0 border-b-3 border-r-3 rounded-br-3xl`} />
+            </div>
+          </div>
 
-      <div className="absolute inset-x-0 bottom-28 flex justify-center">
-        {loading ? (
-          <p className="text-white text-lg font-bold px-5 py-2 rounded-full bg-black/50 backdrop-blur-md">
-            {LOADING_TEXTS[textIndex]}
-          </p>
-        ) : (
-          <button
-            onClick={handleShutter}
-            aria-label="Take photo"
-            className="w-20 h-20 rounded-full bg-white border-4 border-white/60 ring-4 ring-black/20 active:scale-95 transition-transform"
+          <div className="absolute inset-x-0 bottom-28 flex justify-center">
+            {loading ? (
+              <p className="text-white text-lg font-bold px-5 py-2 rounded-full bg-black/60 backdrop-blur-md">
+                {LOADING_TEXTS[textIndex]}
+              </p>
+            ) : (
+              <button
+                onClick={handleShutter}
+                aria-label="Take photo"
+                className="w-20 h-20 rounded-full bg-white border-4 border-white/60 ring-4 ring-black/20 active:scale-95 transition-transform"
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {stickerBase64 && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6">
+          <h2 className="text-2xl text-white font-black mb-5">New Cat Sticker!</h2>
+          <div className="w-64 h-64 bg-white/10 rounded-3xl p-4 flex items-center justify-center mb-6 border border-white/20">
+            <img
+              src={stickerBase64}
+              alt="Cat sticker preview"
+              className="max-w-full max-h-full object-contain drop-shadow-[0_0_12px_rgba(255,255,255,0.6)]"
+            />
+          </div>
+          <input
+            type="text"
+            placeholder="Name this cat..."
+            value={catName}
+            onChange={(e) => setCatName(e.target.value)}
+            disabled={saving}
+            className="w-full max-w-xs px-4 py-3 rounded-xl bg-white text-black text-lg text-center font-semibold mb-4 outline-none"
+            autoFocus
           />
-        )}
-      </div>
+          <div className="flex gap-3 w-full max-w-xs">
+            <button
+              onClick={() => {
+                setStickerBase64(null);
+                setCatName("");
+                resumeVideo();
+              }}
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-neutral-700 text-white font-bold"
+            >
+              Discard
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-white text-black font-bold disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save to Dex"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {toast && (
-        <div className="absolute top-6 inset-x-4 flex justify-center">
+        <div className="absolute top-6 inset-x-4 flex justify-center z-50">
           <div className="flex items-center gap-3 bg-white text-black rounded-full pl-5 pr-2 py-2 shadow-lg">
             <span className="text-sm font-medium">{toast}</span>
             <button
@@ -178,14 +270,6 @@ export default function CameraCapture() {
             </button>
           </div>
         </div>
-      )}
-
-      {result && (
-        <IdentificationOverlay
-          result={result}
-          onClose={closeOverlay}
-          onRetake={closeOverlay}
-        />
       )}
     </div>
   );

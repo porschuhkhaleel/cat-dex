@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import {
   loadCollection,
   removeCatFromCollection,
-  toImageSrc,
 } from "../utils/collectionStorage";
 
 const OUTLINE = [
@@ -13,11 +13,31 @@ const OUTLINE = [
 const CARD_FILTER = `${OUTLINE} drop-shadow(0 8px 10px rgba(0,0,0,0.5))`;
 
 export default function Collection() {
-  const [cats, setCats] = useState(() => loadCollection());
+  const { currentUser } = useAuth();
+  const [cats, setCats] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  function handleDelete(id) {
-    removeCatFromCollection(id);
-    setCats(loadCollection());
+  useEffect(() => {
+    let active = true;
+    async function fetchCats() {
+      try {
+        const items = await loadCollection(currentUser?.uid);
+        if (active) setCats(items);
+      } catch (err) {
+        console.error("Failed to load collection:", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    fetchCats();
+    return () => {
+      active = false;
+    };
+  }, [currentUser]);
+
+  async function handleDelete(id) {
+    setCats((prev) => prev.filter((c) => c.id !== id));
+    await removeCatFromCollection(currentUser.uid, id);
   }
 
   return (
@@ -28,7 +48,9 @@ export default function Collection() {
           {cats.length} {cats.length === 1 ? "cat" : "cats"} collected
         </p>
 
-        {cats.length === 0 ? (
+        {loading ? (
+          <div className="mt-24 text-center text-neutral-400">Loading your cats...</div>
+        ) : cats.length === 0 ? (
           <div className="mt-24 text-center">
             <p className="text-6xl mb-4">🐾</p>
             <p className="text-lg font-semibold">No cats yet</p>
@@ -45,7 +67,7 @@ export default function Collection() {
               >
                 <button
                   onClick={() => handleDelete(cat.id)}
-                  aria-label={`Delete ${cat.breed}`}
+                  aria-label={`Delete ${cat.name}`}
                   className="absolute top-3 right-3 w-8 h-8 rounded-full bg-neutral-800 text-neutral-300 flex items-center justify-center hover:text-red-400"
                 >
                   <svg
@@ -65,17 +87,16 @@ export default function Collection() {
                 </button>
                 <div className="h-32 w-full flex items-center justify-center mt-4">
                   <img
-                    src={toImageSrc(cat.stickerBase64)}
-                    alt={cat.breed}
+                    src={cat.stickerBase64}
+                    alt={cat.name}
                     style={{ filter: CARD_FILTER, transform: "rotate(-3deg)" }}
                     className="max-h-28 max-w-full object-contain"
                   />
                 </div>
                 <h2 className="mt-4 text-lg font-extrabold text-center leading-tight">
-                  {cat.breed}
+                  {cat.name}
                 </h2>
-                <p className="text-xs text-neutral-300 mt-1">{cat.rarity}</p>
-                <p className="text-xs text-neutral-500 mt-0.5">
+                <p className="text-xs text-neutral-500 mt-1">
                   {new Date(cat.savedAt).toLocaleDateString()}
                 </p>
               </div>

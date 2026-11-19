@@ -18,7 +18,11 @@ function Home() {
 
   return (
     <div className="h-full">
-      {tab === "camera" ? <CameraCapture /> : <Collection />}
+      {tab === "camera" ? (
+        <CameraCapture onSaved={() => setTab("collection")} />
+      ) : (
+        <Collection />
+      )}
 
       <button
         onClick={logout}
