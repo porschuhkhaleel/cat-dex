@@ -15,12 +15,27 @@ const LOADING_TEXTS = [
 ];
 
 const RANDOM_CAT_NAMES = [
-  "Mochi", "Biscuit", "Bean", "Noodle", "Pebble", "Crouton",
-  "Gnocchi", "Tofu", "Miso", "Socks", "Toast", "Waffles",
-  "Pickles", "Olive", "Fig", "Boba", "Chai", "Pudding",
-  "Nacho", "Ziti", "Gremlin", "Nugget", "Sprout", "Pepper",
-  "Marble", "Nimbus", "Soot", "Tater", "Ziggy", "Momo",
-  "Cinnamon", "Dumpling", "Ketchup", "Pesto", "Sardine", "Yuzu",
+  // Must-haves
+  "Mozi", "Sugar",
+
+  // Best from your list
+  "Beer", "Biscuit", "Boo", "Bubba", "Butternut", "Butterscotch", "Cat",
+  "Cheeto", "Chewy", "Cookie", "Cuddlebug", "Diva", "Dorito", "Dumpling",
+  "Fifi", "Fritter", "Garfield", "Gizmo", "Goose", "Hobbes", "Jellybean",
+  "Kit-Kat", "Lilou", "Mango", "Meow meow", "Mewie", "Mochi", "Nacho",
+  "Nibbles", "Ninja", "Nouget", "Pip", "Pippi", "Pixie", "Puddin", "Pudge",
+  "Pumpkin", "Queenie", "Rufus", "Sassy", "Smudge", "Spaz", "Spooky",
+  "Stitch", "Sushi", "Tater Tot", "Thumper", "Toast", "Tofu", "Tuna",
+  "Twinkie", "Waffles", "Whisky", "Zelda",
+
+  // Stupid names
+  "Microwave", "Concrete", "Tax Fraud", "Forklift", "Toaster", "Garlic Bread",
+  "Soup", "Drywall", "Speedbump", "Ceiling Fan", "Traffic Cone", "Wi-Fi",
+  "Crouton", "Meatball", "Floorboard", "Cardboard", "Brick", "Lint",
+  "Roomba", "Mayonnaise", "Spoon", "Paperclip", "Radiator", "Megatron",
+  "Honda Civic", "Crunchwrap", "Beef", "Gravel", "Dishwasher", "Beanbag",
+  "Stapler", "Doorstop", "Burrito", "Lawn Mower", "Rat", "Goblin",
+  "Bingus", "Goober", "Grease Trap", "Parking Ticket", "Wet Wipe", "Laundromat",
 ];
 
 function pickRandomName(current) {
