@@ -5,12 +5,7 @@ import {
   removeCatFromCollection,
 } from "../utils/collectionStorage";
 
-const OUTLINE = [
-  [2, 0], [-2, 0], [0, 2], [0, -2], [1.5, 1.5], [-1.5, 1.5], [1.5, -1.5], [-1.5, -1.5],
-]
-  .map(([x, y]) => `drop-shadow(${x}px ${y}px 0 #fff)`)
-  .join(" ");
-const CARD_FILTER = `${OUTLINE} drop-shadow(0 8px 10px rgba(0,0,0,0.5))`;
+const CARD_SHADOW = "drop-shadow(0 8px 12px rgba(0,0,0,0.55))";
 
 export default function Collection() {
   const { currentUser } = useAuth();
@@ -85,23 +80,18 @@ export default function Collection() {
                     <path d="M10 11v6M14 11v6" />
                   </svg>
                 </button>
-                <div className="h-32 w-full flex items-center justify-center mt-4">
+                <div className="h-36 w-full flex items-center justify-center mt-4">
                   <img
                     src={cat.stickerBase64}
                     alt={cat.name}
-                    style={{ filter: CARD_FILTER, transform: "rotate(-3deg)" }}
-                    className="max-h-28 max-w-full object-contain"
+                    style={{ filter: CARD_SHADOW, transform: "rotate(-3deg)" }}
+                    className="max-h-32 max-w-full object-contain"
                   />
                 </div>
-                <h2 className="mt-4 text-lg font-extrabold text-center leading-tight">
+                <h2 className="mt-3 text-lg font-extrabold text-center leading-tight">
                   {cat.name}
                 </h2>
-                {cat.breed && (
-                  <p className="text-xs text-neutral-300 mt-1">
-                    {cat.breed} • {cat.rarity || "Common"}
-                  </p>
-                )}
-                <p className="text-xs text-neutral-500 mt-0.5">
+                <p className="text-xs text-neutral-500 mt-1">
                   {new Date(cat.savedAt).toLocaleDateString()}
                 </p>
               </div>

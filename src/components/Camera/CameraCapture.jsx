@@ -2,20 +2,36 @@ import { useEffect, useRef, useState } from "react";
 import { removeBackground } from "@imgly/background-removal";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveCatToCollection } from "../../utils/collectionStorage";
-import { identifyCat } from "../../utils/catIdentifier";
 
 const MAX_CAPTURE_SIDE = 1024;
 const MAX_STICKER_SIDE = 512;
+const STICKER_BORDER = 12;
+
 const LOADING_TEXTS = [
   "Locking in...",
-  "Identifying the cat...",
-  "Cutting out your sticker...",
+  "Finding the cat...",
+  "Making your sticker...",
   "Almost done...",
 ];
+
+const RANDOM_CAT_NAMES = [
+  "Mochi", "Biscuit", "Bean", "Noodle", "Pebble", "Crouton",
+  "Gnocchi", "Tofu", "Miso", "Socks", "Toast", "Waffles",
+  "Pickles", "Olive", "Fig", "Boba", "Chai", "Pudding",
+  "Nacho", "Ziti", "Gremlin", "Nugget", "Sprout", "Pepper",
+  "Marble", "Nimbus", "Soot", "Tater", "Ziggy", "Momo",
+  "Cinnamon", "Dumpling", "Ketchup", "Pesto", "Sardine", "Yuzu",
+];
+
+function pickRandomName(current) {
+  const pool = RANDOM_CAT_NAMES.filter((n) => n !== current);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 async function blobToResizedStickerDataUrl(blob) {
   const bitmap = await createImageBitmap(blob);
 
+  // 1. Draw full cutout to clean up faint edge pixels and find bounding box
   const raw = document.createElement("canvas");
   raw.width = bitmap.width;
   raw.height = bitmap.height;
@@ -34,9 +50,10 @@ async function blobToResizedStickerDataUrl(blob) {
   for (let y = 0; y < raw.height; y++) {
     for (let x = 0; x < raw.width; x++) {
       const idx = (y * raw.width + x) * 4;
-      if (data[idx + 3] < 140) {
+      if (data[idx + 3] < 160) {
         data[idx + 3] = 0;
       } else {
+        data[idx + 3] = 255;
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
@@ -53,16 +70,48 @@ async function blobToResizedStickerDataUrl(blob) {
     maxY = raw.height - 1;
   }
 
+  // 2. Resize the cropped cat to leave room for the die-cut white border
   const cropW = maxX - minX + 1;
   const cropH = maxY - minY + 1;
-  const scale = Math.min(1, MAX_STICKER_SIDE / Math.max(cropW, cropH));
+  const innerMax = MAX_STICKER_SIDE - STICKER_BORDER * 2;
+  const scale = Math.min(1, innerMax / Math.max(cropW, cropH));
+  const drawW = Math.round(cropW * scale);
+  const drawH = Math.round(cropH * scale);
 
+  // 3. Create a solid white silhouette of the cat
+  const silhouette = document.createElement("canvas");
+  silhouette.width = drawW;
+  silhouette.height = drawH;
+  const silCtx = silhouette.getContext("2d");
+  silCtx.drawImage(raw, minX, minY, cropW, cropH, 0, 0, drawW, drawH);
+  silCtx.globalCompositeOperation = "source-in";
+  silCtx.fillStyle = "#ffffff";
+  silCtx.fillRect(0, 0, drawW, drawH);
+
+  // 4. Stamp the white silhouette in a smooth circle, then draw the cat on top
   const out = document.createElement("canvas");
-  out.width = Math.round(cropW * scale);
-  out.height = Math.round(cropH * scale);
-  out
-    .getContext("2d")
-    .drawImage(raw, minX, minY, cropW, cropH, 0, 0, out.width, out.height);
+  out.width = drawW + STICKER_BORDER * 2;
+  out.height = drawH + STICKER_BORDER * 2;
+  const outCtx = out.getContext("2d");
+
+  const steps = 16;
+  for (let i = 0; i < steps; i++) {
+    const angle = (i / steps) * Math.PI * 2;
+    const ox = Math.cos(angle) * STICKER_BORDER;
+    const oy = Math.sin(angle) * STICKER_BORDER;
+    outCtx.drawImage(silhouette, STICKER_BORDER + ox, STICKER_BORDER + oy);
+  }
+  outCtx.drawImage(
+    raw,
+    minX,
+    minY,
+    cropW,
+    cropH,
+    STICKER_BORDER,
+    STICKER_BORDER,
+    drawW,
+    drawH
+  );
 
   const webp = out.toDataURL("image/webp", 0.85);
   return webp.startsWith("data:image/webp") ? webp : out.toDataURL("image/png");
@@ -77,7 +126,6 @@ export default function CameraCapture({ onSaved }) {
   const [saving, setSaving] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
   const [stickerBase64, setStickerBase64] = useState(null);
-  const [catInfo, setCatInfo] = useState(null);
   const [catName, setCatName] = useState("");
   const [toast, setToast] = useState("");
 
@@ -173,17 +221,12 @@ export default function CameraCapture({ onSaved }) {
       );
       if (!photoBlob) throw new Error("Failed to capture photo.");
 
-      const [cutoutBlob, identified] = await Promise.all([
-        removeBackground(photoBlob),
-        identifyCat(canvas),
-      ]);
-
+      const cutoutBlob = await removeBackground(photoBlob);
       const dataUrl = await blobToResizedStickerDataUrl(cutoutBlob);
       setStickerBase64(dataUrl);
-      setCatInfo(identified);
     } catch (err) {
       console.error("Sticker error:", err);
-      setToast("Couldn't process that photo. Try again!");
+      setToast("Couldn't cut out that photo. Try again!");
       resumeVideo();
     } finally {
       setLoading(false);
@@ -201,12 +244,8 @@ export default function CameraCapture({ onSaved }) {
       await saveCatToCollection(currentUser.uid, {
         name: catName,
         stickerBase64,
-        breed: catInfo?.breed,
-        rarity: catInfo?.rarity,
-        funFact: catInfo?.funFact,
       });
       setStickerBase64(null);
-      setCatInfo(null);
       setCatName("");
       if (onSaved) onSaved();
     } catch (err) {
@@ -268,45 +307,43 @@ export default function CameraCapture({ onSaved }) {
       )}
 
       {stickerBase64 && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6 overflow-y-auto">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-3 py-1 rounded-full bg-white text-black text-xs font-extrabold uppercase tracking-wide">
-              {catInfo?.breed || "Mystery Cat"}
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-semibold border border-white/20">
-              {catInfo?.rarity || "Common"}
-            </span>
-          </div>
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6">
+          <h2 className="text-2xl text-white font-black mb-5">New Cat Sticker!</h2>
 
-          <div className="w-56 h-56 bg-white/10 rounded-3xl p-4 flex items-center justify-center mb-4 border border-white/20">
+          <div className="w-64 h-64 bg-white/10 rounded-3xl p-4 flex items-center justify-center mb-6 border border-white/20">
             <img
               src={stickerBase64}
               alt="Cat sticker preview"
-              className="max-w-full max-h-full object-contain drop-shadow-[0_0_12px_rgba(255,255,255,0.6)]"
+              className="max-w-full max-h-full object-contain drop-shadow-[0_10px_14px_rgba(0,0,0,0.6)]"
             />
           </div>
 
-          {catInfo?.funFact && (
-            <p className="text-neutral-300 text-xs text-center max-w-xs mb-4 leading-relaxed">
-              {catInfo.funFact}
-            </p>
-          )}
-
-          <input
-            type="text"
-            placeholder="Name this cat..."
-            value={catName}
-            onChange={(e) => setCatName(e.target.value)}
-            disabled={saving}
-            className="w-full max-w-xs px-4 py-3 rounded-xl bg-white text-black text-lg text-center font-semibold mb-4 outline-none"
-            autoFocus
-          />
+          <div className="flex gap-2 w-full max-w-xs mb-4">
+            <input
+              type="text"
+              placeholder="Name this cat..."
+              value={catName}
+              onChange={(e) => setCatName(e.target.value)}
+              disabled={saving}
+              className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-white text-black text-lg font-semibold outline-none"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setCatName(pickRandomName(catName))}
+              disabled={saving}
+              title="Random cat name"
+              aria-label="Generate random cat name"
+              className="px-4 py-3 rounded-xl bg-neutral-800 text-white text-xl font-bold border border-white/20 active:scale-95 transition-transform"
+            >
+              🎲
+            </button>
+          </div>
 
           <div className="flex gap-3 w-full max-w-xs">
             <button
               onClick={() => {
                 setStickerBase64(null);
-                setCatInfo(null);
                 setCatName("");
                 resumeVideo();
               }}
