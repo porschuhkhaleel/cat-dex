@@ -19,14 +19,14 @@ const RANDOM_CAT_NAMES = [
   "Mozi", "Sugar",
 
   // Best from your list
-  "Beer", "Biscuit", "Boo", "Bubba", "Butternut", "Butterscotch", "Cat",
+  "Beer", "ruba refa3i", "wifi router", "Bubba", "Butternut", "Butterscotch", "Cat",
   "Cheeto", "Chewy", "Cookie", "Cuddlebug", "Diva", "Dorito", "Dumpling",
-  "Fifi", "Fritter", "Garfield", "Gizmo", "Goose", "Hobbes", "Jellybean",
-  "Kit-Kat", "Lilou", "Mango", "Meow meow", "Mewie", "Mochi", "Nacho",
-  "Nibbles", "Ninja", "Nouget", "Pip", "Pippi", "Pixie", "Puddin", "Pudge",
-  "Pumpkin", "Queenie", "Rufus", "Sassy", "Smudge", "Spaz", "Spooky",
-  "Stitch", "Sushi", "Tater Tot", "Thumper", "Toast", "Tofu", "Tuna",
-  "Twinkie", "Waffles", "Whisky", "Zelda",
+  "Fifi", "Fritter", "Garfield", "Gizmo", "OME", "yazeed", "aws",
+  "Kit-Kat", "67", "Mango", "ayham", "Mewie", "Mochi", "Nacho",
+  "water bottle", "Ninja", "Nouget", "Pip", "pepsi", "Pixie", "Puddin", "Pudge",
+  "Pumpkin", "Queenie", "Rufus", "snjoob", "Smudge", "Spaz", "Spooky",
+  "Stitch", "Sushi", "Tater Tot", "the rock", "Toast", "Tofu", "Tuna",
+  "android phone ", "Waffles", "Whisky", "c6 corvette",
 
   // Stupid names
   "Microwave", "Concrete", "Tax Fraud", "Forklift", "Toaster", "Garlic Bread",
