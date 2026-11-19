@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
+    "@tensorflow-models/mobilenet": "^2.1.1",
+    "@tensorflow/tfjs": "^4.22.0",
     "firebase": "^12.19.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

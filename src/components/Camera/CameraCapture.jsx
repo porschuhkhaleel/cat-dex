@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { removeBackground } from "@imgly/background-removal";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveCatToCollection } from "../../utils/collectionStorage";
+import { identifyCat } from "../../utils/catIdentifier";
 
 const MAX_CAPTURE_SIDE = 1024;
 const MAX_STICKER_SIDE = 512;
 const LOADING_TEXTS = [
   "Locking in...",
-  "Finding the cat...",
+  "Identifying the cat...",
   "Cutting out your sticker...",
   "Almost done...",
 ];
@@ -15,7 +16,6 @@ const LOADING_TEXTS = [
 async function blobToResizedStickerDataUrl(blob) {
   const bitmap = await createImageBitmap(blob);
 
-  // Draw full cutout to inspect pixels
   const raw = document.createElement("canvas");
   raw.width = bitmap.width;
   raw.height = bitmap.height;
@@ -26,8 +26,6 @@ async function blobToResizedStickerDataUrl(blob) {
   const imgData = rawCtx.getImageData(0, 0, raw.width, raw.height);
   const data = imgData.data;
 
-  // 1. Remove faint semi-transparent wisps that cause white blobs
-  // 2. Find the tight bounding box around the cat to auto-crop
   let minX = raw.width;
   let minY = raw.height;
   let maxX = 0;
@@ -48,7 +46,6 @@ async function blobToResizedStickerDataUrl(blob) {
   }
   rawCtx.putImageData(imgData, 0, 0);
 
-  // Fallback if image was completely empty
   if (maxX <= minX || maxY <= minY) {
     minX = 0;
     minY = 0;
@@ -80,6 +77,7 @@ export default function CameraCapture({ onSaved }) {
   const [saving, setSaving] = useState(false);
   const [textIndex, setTextIndex] = useState(0);
   const [stickerBase64, setStickerBase64] = useState(null);
+  const [catInfo, setCatInfo] = useState(null);
   const [catName, setCatName] = useState("");
   const [toast, setToast] = useState("");
 
@@ -175,12 +173,18 @@ export default function CameraCapture({ onSaved }) {
       );
       if (!photoBlob) throw new Error("Failed to capture photo.");
 
-      const cutoutBlob = await removeBackground(photoBlob);
+      // Run background removal and breed identification at the same time
+      const [cutoutBlob, identified] = await Promise.all([
+        removeBackground(photoBlob),
+        identifyCat(canvas),
+      ]);
+
       const dataUrl = await blobToResizedStickerDataUrl(cutoutBlob);
       setStickerBase64(dataUrl);
+      setCatInfo(identified);
     } catch (err) {
       console.error("Sticker error:", err);
-      setToast("Couldn't cut out that photo. Try again!");
+      setToast("Couldn't process that photo. Try again!");
       resumeVideo();
     } finally {
       setLoading(false);
@@ -198,8 +202,12 @@ export default function CameraCapture({ onSaved }) {
       await saveCatToCollection(currentUser.uid, {
         name: catName,
         stickerBase64,
+        breed: catInfo?.breed,
+        rarity: catInfo?.rarity,
+        funFact: catInfo?.funFact,
       });
       setStickerBase64(null);
+      setCatInfo(null);
       setCatName("");
       if (onSaved) onSaved();
     } catch (err) {
@@ -261,61 +269,30 @@ export default function CameraCapture({ onSaved }) {
       )}
 
       {stickerBase64 && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6">
-          <h2 className="text-2xl text-white font-black mb-5">New Cat Sticker!</h2>
-          <div className="w-64 h-64 bg-white/10 rounded-3xl p-4 flex items-center justify-center mb-6 border border-white/20">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm p-6 overflow-y-auto">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-3 py-1 rounded-full bg-white text-black text-xs font-extrabold uppercase tracking-wide">
+              {catInfo?.breed || "Mystery Cat"}
+            </span>
+            <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-semibold border border-white/20">
+              {catInfo?.rarity || "Common"}
+            </span>
+          </div>
+
+          <div className="w-56 h-56 bg-white/10 rounded-3xl p-4 flex items-center justify-center mb-4 border border-white/20">
             <img
               src={stickerBase64}
               alt="Cat sticker preview"
               className="max-w-full max-h-full object-contain drop-shadow-[0_0_12px_rgba(255,255,255,0.6)]"
             />
           </div>
+
+          {catInfo?.funFact && (
+            <p className="text-neutral-300 text-xs text-center max-w-xs mb-4 leading-relaxed">
+              {catInfo.funFact}
+            </p>
+          )}
+
           <input
             type="text"
-            placeholder="Name this cat..."
-            value={catName}
-            onChange={(e) => setCatName(e.target.value)}
-            disabled={saving}
-            className="w-full max-w-xs px-4 py-3 rounded-xl bg-white text-black text-lg text-center font-semibold mb-4 outline-none"
-            autoFocus
-          />
-          <div className="flex gap-3 w-full max-w-xs">
-            <button
-              onClick={() => {
-                setStickerBase64(null);
-                setCatName("");
-                resumeVideo();
-              }}
-              disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-neutral-700 text-white font-bold"
-            >
-              Discard
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-white text-black font-bold disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save to Dex"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {toast && (
-        <div className="absolute top-6 inset-x-4 flex justify-center z-50">
-          <div className="flex items-center gap-3 bg-white text-black rounded-full pl-5 pr-2 py-2 shadow-lg">
-            <span className="text-sm font-medium">{toast}</span>
-            <button
-              onClick={() => setToast("")}
-              className="w-7 h-7 rounded-full bg-neutral-200 text-sm font-bold"
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+            placeholder="Name

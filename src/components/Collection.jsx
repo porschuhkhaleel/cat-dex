@@ -96,7 +96,12 @@ export default function Collection() {
                 <h2 className="mt-4 text-lg font-extrabold text-center leading-tight">
                   {cat.name}
                 </h2>
-                <p className="text-xs text-neutral-500 mt-1">
+                {cat.breed && (
+                  <p className="text-xs text-neutral-300 mt-1">
+                    {cat.breed} • {cat.rarity || "Common"}
+                  </p>
+                )}
+                <p className="text-xs text-neutral-500 mt-0.5">
                   {new Date(cat.savedAt).toLocaleDateString()}
                 </p>
               </div>
